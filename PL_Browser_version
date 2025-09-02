@@ -18,9 +18,13 @@
         font-size:11px;letter-spacing:.06em;font-weight:700;margin-left:8px}
   .controls{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
   button{padding:12px 16px;border-radius:10px;border:1px solid #203041;background:#152033;color:var(--ink);
-         font-weight:700;cursor:pointer;font-size:14px;min-width:120px}
-  button:hover{background:#1a2940;border-color:#2a435e}
+         font-weight:700;cursor:pointer;font-size:14px;min-width:120px;transition:all 0.2s ease}
+  button:hover{background:#1a2940;border-color:#2a435e;transform:translateY(-1px)}
   button.primary{background:#123552;border-color:#235c83}
+  .audio-controls{display:flex;gap:8px;align-items:center}
+  .volume-slider{width:80px;height:6px;border-radius:3px;background:#203041;outline:none;cursor:pointer}
+  .volume-slider::-webkit-slider-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer}
+  .audio-toggle{padding:8px;min-width:40px;background:#152033;border:1px solid #203041;font-size:16px}
   main{display:grid;grid-template-columns:1fr 2fr;gap:16px;padding:16px}
   @media(max-width:800px){
     main{grid-template-columns:1fr; padding:12px}
@@ -77,16 +81,37 @@
   .good{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
   .tag{display:inline-block;padding:2px 8px;border:1px solid #2a3c50;border-radius:999px;background:#0e1b29;color:var(--accent);font-size:11px}
   .divider{height:1px;background:linear-gradient(90deg, transparent, #243141, transparent);margin:8px 0}
+
+  /* Audio indicator */
+  .audio-indicator{
+    position:fixed;
+    top:20px;
+    right:20px;
+    background:rgba(18,24,33,0.9);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:8px 12px;
+    font-size:12px;
+    color:var(--muted);
+    backdrop-filter:blur(10px);
+    transition:opacity 0.3s ease;
+    z-index:1000;
+  }
+  .audio-indicator.hidden{opacity:0;pointer-events:none}
 </style>
 </head>
 <body>
-  <header>
-    <h1>Promised Land <span class="pill">Pharaoh Pursuit Campaign</span></h1>
-    <div class="controls">
-      <button class="primary" id="btnNew">New Campaign</button>
-      <button id="btnClear">Clear Log</button>
-    </div>
-  </header>
+	<header>
+		<h1>Promised Land <span class="pill">Pharaoh Pursuit Campaign</span></h1>
+		<div class="controls">
+			<div class="audio-controls">
+				<button class="audio-toggle" id="btnMute" title="Toggle Audio">🔊</button>
+				<input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="50" title="Master Volume">
+			</div>
+			<button class="primary" id="btnNew">New Campaign</button>
+			<button id="btnClear">Clear Log</button>
+		</div>
+	</header>
 
   <main>
     <aside class="card">
@@ -117,8 +142,327 @@
       <div class="terminal" id="log" aria-live="polite"></div>
     </section>
   </main>
-
+  
+<!-- Audio indicator -->
+  <div class="audio-indicator hidden" id="audioIndicator">♪ Playing: Menu Theme</div>
 <script>
+/* ---------- Audio System ---------- */
+class AudioManager {
+  constructor() {
+    this.sounds = {};
+    this.music = {};
+    this.currentMusic = null;
+    this.masterVolume = 0.5;
+    this.musicVolume = 0.3;
+    this.sfxVolume = 0.7;
+    this.muted = false;
+    this.fadeInterval = null;
+    
+    this.initializeAudio();
+    this.setupEventListeners();
+  }
+
+  initializeAudio() {
+    // Define all audio files
+    this.audioFiles = {
+      // Background Music
+      music: {
+        //'menu': 'game_assets/sounds/menu_theme.mp3',
+        //'egypt': 'game_assets/sounds/egypt_theme.mp3',
+        //'desert': 'game_assets/sounds/desert_ambient.mp3',
+        //'red_sea': 'game_assets/sounds/red_sea_theme.mp3',
+        //'sinai': 'game_assets/sounds/sinai_theme.mp3',
+        //'victory': 'game_assets/sounds/victory_theme.mp3',
+        //'defeat': 'game_assets/sounds/defeat_theme.mp3',
+        //'pharaoh_chase': 'game_assets/sounds/pharaoh_pursuit.mp3',
+        //'peaceful': 'game_assets/sounds/peaceful_journey.mp3'
+		'menu': 'game_assets/sounds/bg00.mp3',
+        'egypt': 'game_assets/sounds/bg00.mp3',
+        'desert': 'game_assets/sounds/bg00.mp3',
+        'red_sea': 'game_assets/sounds/bg00.mp3',
+        'sinai': 'game_assets/sounds/bg00.mp3',
+        'victory': 'game_assets/sounds/bg00.mp3',
+        'defeat': 'game_assets/sounds/bg00.mp3',
+        'pharaoh_chase': 'game_assets/sounds/bg00.mp3',
+        'peaceful': 'game_assets/sounds/bg00.mp3'
+      },
+      // Sound Effects
+      sounds: {
+        'button_click': 'game_assets/sounds/button_click.mp3',
+        'button_hover': 'game_assets/sounds/button_hover.mp3',
+        'choice_select': 'game_assets/sounds/choice_select.mp3',
+        'travel': 'game_assets/sounds/travel_footsteps.mp3',
+        'rest': 'game_assets/sounds/button_click.mp3',
+        'event_positive': 'game_assets/sounds/button_click.mp3',
+        'event_negative': 'game_assets/sounds/button_hover.mp3',
+        'resource_gain': 'game_assets/sounds/choice_select.mp3',
+        'resource_loss': 'game_assets/sounds/choice_select.mp3',
+        'people_die': 'game_assets/sounds/choice_select.mp3',
+        'miracle': 'game_assets/sounds/choice_select.mp3',
+        'warning': 'game_assets/sounds/choice_select.mp3'
+      }
+    };
+
+    // Preload all audio
+    this.preloadAudio();
+  }
+
+  preloadAudio() {
+    // Preload music
+    Object.entries(this.audioFiles.music).forEach(([key, path]) => {
+      const audio = new Audio();
+      audio.src = path;
+      audio.loop = true;
+      audio.volume = 0;
+      audio.preload = 'auto';
+      
+      // Handle loading errors gracefully
+      audio.onerror = () => {
+        console.warn(`Failed to load music: ${path}`);
+      };
+      
+      this.music[key] = audio;
+    });
+
+    // Preload sound effects
+    Object.entries(this.audioFiles.sounds).forEach(([key, path]) => {
+      const audio = new Audio();
+      audio.src = path;
+      audio.volume = 0;
+      audio.preload = 'auto';
+      
+      audio.onerror = () => {
+        console.warn(`Failed to load sound: ${path}`);
+      };
+      
+      this.sounds[key] = audio;
+    });
+  }
+
+  setupEventListeners() {
+    // Volume control
+    const volumeSlider = document.getElementById('volumeSlider');
+    volumeSlider.addEventListener('input', (e) => {
+      this.setMasterVolume(e.target.value / 100);
+    });
+
+    // Mute button
+    const muteBtn = document.getElementById('btnMute');
+    muteBtn.addEventListener('click', () => {
+      this.toggleMute();
+    });
+
+    // Add sound effects to all buttons
+    this.addButtonSounds();
+  }
+
+  addButtonSounds() {
+    // Add click sounds to all buttons
+    document.addEventListener('click', (e) => {
+      if (e.target.tagName === 'BUTTON') {
+        if (e.target.classList.contains('choice')) {
+          this.playSound('choice_select');
+        } else {
+          this.playSound('button_click');
+        }
+      }
+    });
+
+    // Add hover sounds to buttons
+    document.addEventListener('mouseover', (e) => {
+      if (e.target.tagName === 'BUTTON' && !e.target.disabled) {
+        this.playSound('button_hover');
+      }
+    });
+  }
+
+  setMasterVolume(volume) {
+    this.masterVolume = Math.max(0, Math.min(1, volume));
+    this.updateAllVolumes();
+    
+    // Update UI
+    document.getElementById('volumeSlider').value = this.masterVolume * 100;
+  }
+
+  updateAllVolumes() {
+    const effectiveMusicVol = this.muted ? 0 : this.masterVolume * this.musicVolume;
+    const effectiveSfxVol = this.muted ? 0 : this.masterVolume * this.sfxVolume;
+
+    // Update music volumes
+    Object.values(this.music).forEach(audio => {
+      audio.volume = effectiveMusicVol;
+    });
+
+    // Update sound effect volumes
+    Object.values(this.sounds).forEach(audio => {
+      audio.volume = effectiveSfxVol;
+    });
+  }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    this.updateAllVolumes();
+    
+    // Update mute button
+    const muteBtn = document.getElementById('btnMute');
+    muteBtn.textContent = this.muted ? '🔇' : '🔊';
+    muteBtn.title = this.muted ? 'Unmute Audio' : 'Mute Audio';
+  }
+
+  playSound(soundKey, volume = 1.0) {
+    if (this.muted || !this.sounds[soundKey]) return;
+    
+    try {
+      const sound = this.sounds[soundKey].cloneNode();
+      sound.volume = this.masterVolume * this.sfxVolume * volume;
+      sound.play().catch(e => console.warn('Sound play failed:', e));
+    } catch (e) {
+      console.warn('Sound play error:', e);
+    }
+  }
+
+  playMusic(musicKey, fadeIn = true) {
+    if (this.muted || !this.music[musicKey]) return;
+
+    // Stop current music with fade out
+    if (this.currentMusic && this.currentMusic !== this.music[musicKey]) {
+      this.fadeOutMusic(this.currentMusic);
+    }
+
+    const newMusic = this.music[musicKey];
+    this.currentMusic = newMusic;
+
+    try {
+      newMusic.currentTime = 0;
+      
+      if (fadeIn) {
+        newMusic.volume = 0;
+        newMusic.play().then(() => {
+          this.fadeInMusic(newMusic);
+        }).catch(e => console.warn('Music play failed:', e));
+      } else {
+        newMusic.volume = this.masterVolume * this.musicVolume;
+        newMusic.play().catch(e => console.warn('Music play failed:', e));
+      }
+
+      // Update indicator
+      this.updateAudioIndicator(musicKey);
+    } catch (e) {
+      console.warn('Music play error:', e);
+    }
+  }
+
+  fadeInMusic(audio, duration = 2000) {
+    if (this.fadeInterval) clearInterval(this.fadeInterval);
+    
+    const targetVolume = this.muted ? 0 : this.masterVolume * this.musicVolume;
+    const steps = 50;
+    const stepVolume = targetVolume / steps;
+    const stepTime = duration / steps;
+    let currentStep = 0;
+
+    this.fadeInterval = setInterval(() => {
+      if (currentStep >= steps || audio !== this.currentMusic) {
+        clearInterval(this.fadeInterval);
+        if (audio === this.currentMusic) {
+          audio.volume = targetVolume;
+        }
+        return;
+      }
+      
+      audio.volume = Math.min(stepVolume * currentStep, targetVolume);
+      currentStep++;
+    }, stepTime);
+  }
+
+  fadeOutMusic(audio, duration = 1500) {
+    const startVolume = audio.volume;
+    const steps = 30;
+    const stepVolume = startVolume / steps;
+    const stepTime = duration / steps;
+    let currentStep = 0;
+
+    const fadeInterval = setInterval(() => {
+      if (currentStep >= steps) {
+        clearInterval(fadeInterval);
+        audio.pause();
+        audio.volume = this.muted ? 0 : this.masterVolume * this.musicVolume;
+        return;
+      }
+      
+      audio.volume = Math.max(startVolume - (stepVolume * currentStep), 0);
+      currentStep++;
+    }, stepTime);
+  }
+
+  updateAudioIndicator(musicKey) {
+    const indicator = document.getElementById('audioIndicator');
+    const musicNames = {
+      'menu': 'Menu Theme',
+      'egypt': 'Egyptian March',
+      'desert': 'Desert Winds',
+      'red_sea': 'Waters Part',
+      'sinai': 'Holy Mountain',
+      'victory': 'Promised Land',
+      'defeat': 'Lament',
+      'pharaoh_chase': 'Royal Pursuit',
+      'peaceful': 'Peaceful Journey'
+    };
+
+    indicator.textContent = `♪ Playing: ${musicNames[musicKey] || musicKey}`;
+    indicator.classList.remove('hidden');
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      indicator.classList.add('hidden');
+    }, 3000);
+  }
+
+  stopAllMusic() {
+    Object.values(this.music).forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    this.currentMusic = null;
+  }
+
+  // Context-specific music selection
+  getMusicForContext(context, gameState) {
+    if (!gameState) return 'menu';
+    
+    // Game over states
+    if (gameState.over) {
+      return gameState.victory ? 'victory' : 'defeat';
+    }
+    
+    // Pharaoh pursuit tension
+    if (!gameState.flags.redSea && gameState.pharaohDistance < 20) {
+      return 'pharaoh_chase';
+    }
+    
+    // Location-based music
+    switch (gameState.location) {
+      case 'Egypt':
+        return 'egypt';
+      case 'Red Sea':
+        return 'red_sea';
+      case 'Mount Sinai':
+        return 'sinai';
+      case 'Promised Land':
+        return 'victory';
+      default:
+        // Desert locations with mood-based selection
+        if (gameState.r.morale > 70 && gameState.r.faith > 60) {
+          return 'peaceful';
+        }
+        return 'desert';
+    }
+  }
+}
+
+// Initialize audio manager
+const audioManager = new AudioManager();
+
 /* ---------- Helpers ---------- */
 const $ = id => document.getElementById(id);
 function write(line){
@@ -195,8 +539,15 @@ function newCampaign(){
   };
   $('log').textContent='';
   write('🎮 New campaign begun. You depart Egypt with 600,000 souls.');
+  audioManager.playSound('event_positive');
   renderTravelRest("🌄 You are at the brink of Egypt. Pharaoh reconsiders and gives chase!", 'departure');
   updateHUD();
+  updateMusic();
+}
+
+function updateMusic() {
+  const musicKey = audioManager.getMusicForContext('game', G);
+  audioManager.playMusic(musicKey);
 }
 
 /* ---------- HUD ---------- */
@@ -224,8 +575,18 @@ function endOfDay(factor=1){
   G.r.water    = clamp01to100(G.r.water - cWater);
   G.r.supplies = clamp01to100(G.r.supplies - cSupplies);
 
-  if(G.r.food < 20){ G.r.health -= 5; G.r.morale -= 3; write('⚠️ Low food weakens the camp.'); }
-  if(G.r.water < 15){ G.r.health -= 8; G.r.morale -= 5; write('⚠️ Severe thirst afflicts the people.'); }
+  if(G.r.food < 20){ 
+    G.r.health -= 5; 
+    G.r.morale -= 3; 
+    write('⚠️ Low food weakens the camp.'); 
+    audioManager.playSound('warning');
+  }
+  if(G.r.water < 15){ 
+    G.r.health -= 8; 
+    G.r.morale -= 5; 
+    write('⚠️ Severe thirst afflicts the people.'); 
+    audioManager.playSound('warning');
+  }
   G.r.health = clamp01to100(G.r.health);
   G.r.morale = clamp01to100(G.r.morale);
 
@@ -233,6 +594,7 @@ function endOfDay(factor=1){
     const deaths = Math.floor(500+Math.random()*1000);
     G.people = Math.max(0, G.people - deaths);
     write(`💀 ${deaths} people perished from poor conditions.`);
+    audioManager.playSound('people_die');
   }
   G.day++;
 }

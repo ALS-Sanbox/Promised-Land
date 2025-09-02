@@ -1,0 +1,520 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Promised Land — Pharaoh Pursuit Campaign</title>
+<style>
+  :root{
+    --bg:#0b0f14;--panel:#121821;--ink:#e6edf3;--muted:#9db4c0;--accent:#93e2ff;
+    --good:#86efac;--warn:#facc15;--bad:#f87171;--line:#1f2a37;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 800px at 20% 0%, #142030 0%, #0b0f14 70%);color:var(--ink);
+       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+  header{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:16px 18px;border-bottom:1px solid var(--line);background:#0d141d}
+  h1{font-size:18px;margin:0; flex-shrink:1}
+  .pill{padding:2px 8px;border-radius:999px;border:1px solid #27425a;background:#132233;color:var(--accent);
+        font-size:11px;letter-spacing:.06em;font-weight:700;margin-left:8px}
+  .controls{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{padding:12px 16px;border-radius:10px;border:1px solid #203041;background:#152033;color:var(--ink);
+         font-weight:700;cursor:pointer;font-size:14px;min-width:120px}
+  button:hover{background:#1a2940;border-color:#2a435e}
+  button.primary{background:#123552;border-color:#235c83}
+  main{display:grid;grid-template-columns:1fr 2fr;gap:16px;padding:16px}
+  @media(max-width:800px){
+    main{grid-template-columns:1fr; padding:12px}
+  }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .section-title{margin:0 0 10px 0;color:var(--muted);font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+  .row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 0;border-bottom:1px dashed #223249}
+  .row:last-child{border-bottom:0}
+  .label{color:var(--muted)}
+  .value{font-weight:800}
+  progress{width:100%;height:10px}
+  #eventText{white-space:pre-wrap;line-height:1.5;min-height:140px; overflow:auto;}
+  .choices{display:grid;gap:8px;margin-top:12px}
+  .choice{justify-content:flex-start;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .disabled{opacity:.5;cursor:not-allowed}
+  .terminal{height:220px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-size:13px;background:#0a0f15;border:1px solid var(--line);border-radius:10px;padding:10px}
+  .muted{color:var(--muted)}
+  .good{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  .tag{display:inline-block;padding:2px 8px;border:1px solid #2a3c50;border-radius:999px;background:#0e1b29;color:var(--accent);font-size:11px}
+  .divider{height:1px;background:linear-gradient(90deg, transparent, #243141, transparent);margin:8px 0}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Promised Land <span class="pill">Pharaoh Pursuit Campaign</span></h1>
+    <div class="controls">
+      <button class="primary" id="btnNew">New Campaign</button>
+      <button id="btnClear">Clear Log</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="card">
+      <h2 class="section-title">Status</h2>
+      <div class="row"><div class="label">Day</div><div class="value" id="vDay">—</div></div>
+      <div class="row"><div class="label">Location</div><div class="value" id="vLocation">—</div></div>
+      <div class="row"><div class="label">Distance to Promise</div><div class="value"><span id="vDist">—</span> mi</div></div>
+      <div class="row"><div class="label">Pharaoh's Army</div><div class="value" id="vPharaoh">—</div></div>
+      <div class="divider"></div>
+      <div class="row"><div class="label">People</div><div class="value" id="vPeople">—</div></div>
+      <div class="row"><div class="label">Food</div><div class="value" id="vFood">—</div></div>
+      <div class="row"><div class="label">Water</div><div class="value" id="vWater">—</div></div>
+      <div class="row"><div class="label">Health</div><div class="value" id="vHealth">—</div></div>
+      <div class="row"><div class="label">Morale</div><div class="value" id="vMorale">—</div></div>
+      <div class="row"><div class="label">Faith</div><div class="value" id="vFaith">—</div></div>
+      <div class="row"><div class="label">Supplies</div><div class="value" id="vSupplies">—</div></div>
+      <div class="divider"></div>
+      <div class="row"><div class="label">Progress</div><div class="value"><progress id="vProgress" value="0" max="100"></progress></div></div>
+    </aside>
+
+    <section class="card">
+      <h2 class="section-title">Journey Log</h2>
+      <div id="eventText">Click <b>New Campaign</b> to begin your journey from Egypt.</div>
+      <div class="choices" id="choices"></div>
+      <div class="divider"></div>
+      <div class="terminal" id="log" aria-live="polite"></div>
+    </section>
+  </main>
+
+<script>
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id);
+function write(line){
+  const t=$('log');
+  const atBottom=Math.abs(t.scrollHeight-t.scrollTop-t.clientHeight)<4;
+  t.insertAdjacentHTML('beforeend', (''+line).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'\n');
+  if(atBottom) t.scrollTop=t.scrollHeight;
+}
+function clamp01to100(x){ return Math.max(0, Math.min(100, x)); }
+
+/* ---------- Game State ---------- */
+let G=null;
+let totalDistance=250;
+function newCampaign(){
+  G = {
+    day:0,
+    location:'Egypt',
+    distance:totalDistance,                 // abstract distance to the Promised Land
+    pharaohDistance:100,           // miles behind the Israelites; depletes until Red Sea crossing
+    people:600000,
+    r:{ food:100, water:100, health:80, morale:70, faith:90, supplies:50 },
+    flags:{ atRedSea:false, redSea:false, bitterwater: false, commandments:false, calf:false, manna:false, jordan:false },
+    over:false, victory:false
+  };
+  $('log').textContent='';
+  write('🎮 New campaign begun. You depart Egypt with 600,000 souls.');
+  renderTravelRest("🌄 You are at the brink of Egypt. Pharaoh reconsiders and gives chase!");
+  updateHUD();
+}
+
+/* ---------- HUD ---------- */
+function updateHUD(){
+  $('vDay').textContent       = G.day;
+  $('vLocation').textContent  = G.location;
+  $('vDist').textContent      = Math.max(0,G.distance);
+  $('vPeople').textContent    = G.people.toLocaleString();
+  $('vFood').textContent      = G.r.food+'%';
+  $('vWater').textContent     = G.r.water+'%';
+  $('vHealth').textContent    = G.r.health+'%';
+  $('vMorale').textContent    = G.r.morale+'%';
+  $('vFaith').textContent     = G.r.faith+'%';
+  $('vSupplies').textContent  = G.r.supplies+'%';
+  $('vProgress').value        = Math.round(((300 - G.distance)/300)*100);
+  $('vPharaoh').textContent   = G.flags.redSea ? 'No longer pursuing' : (G.pharaohDistance+' mi behind');
+}
+
+/* ---------- Daily consumption & condition ---------- */
+function endOfDay(factor=1){
+  const cFood     = Math.floor((5+Math.random()*7) * factor); // 5—12
+  const cWater    = Math.floor((8+Math.random()*9) * factor); // 8—17
+  const cSupplies = Math.floor((1+Math.random()*3) * factor); // 1—3
+  G.r.food     = clamp01to100(G.r.food - cFood);
+  G.r.water    = clamp01to100(G.r.water - cWater);
+  G.r.supplies = clamp01to100(G.r.supplies - cSupplies);
+
+  if(G.r.food < 20){ G.r.health -= 5; G.r.morale -= 3; write('⚠️ Low food weakens the camp.'); }
+  if(G.r.water < 15){ G.r.health -= 8; G.r.morale -= 5; write('⚠️ Severe thirst afflicts the people.'); }
+  G.r.health = clamp01to100(G.r.health);
+  G.r.morale = clamp01to100(G.r.morale);
+
+  if(G.r.health < 10){
+    const deaths = Math.floor(500+Math.random()*1000);
+    G.people = Math.max(0, G.people - deaths);
+    write(`💀 ${deaths} people perished from poor conditions.`);
+  }
+  G.day++;
+}
+
+/* ---------- Events (random pool) ---------- */
+const randomEvents = [
+  {
+    name:"Thirst and Complaints",
+    desc:"Water runs low. Murmurs spread in the camp.",
+    choices:[
+      {text:"Strike the rock (Faith ≥ 50)", req: s=>s.r.faith>=50, eff:{water:+30,faith:+10,morale:+15}},
+      {text:"Search for a well", req: s=>true, eff:{water:+10,supplies:-5,health:-10}},
+      {text:"Ration strictly", req: s=>true, eff:{water:+5,morale:-20,health:-10}}
+    ]
+  },
+  {
+    name:"Amalekite Skirmish",
+    desc:"Raiders test your defenses at the camp's edge.",
+    choices:[
+      {text:"Send Joshua with warriors", req:s=>true, eff:{morale:+10,faith:+5,food:-10,health:-10}},
+      {text:"Raise the staff (Faith ≥ 60)", req:s=>s.r.faith>=60, eff:{faith:+20,morale:+15}},
+      {text:"Retreat and lose supplies", req:s=>true, eff:{supplies:-30,morale:-15,health:-5}}
+    ]
+  },
+  {
+    name:"6th Day Manna from Heaven",
+    desc:"Bread-like flakes cover the ground at dawn.",
+    choices:[
+      {text:"Gather double portion", req:s=>true, eff:{food:+100,faith:+15,morale:+10,water:+100}, flag:'manna'},
+      {text:"Store extra", req:s=>true, eff:{food:+5,faith:-10,health:-10,water:+5}},
+      {text:"Question the miracle", req:s=>true, eff:{faith:-15,morale:-5}}
+    ]
+  }
+];
+
+function maybeRandomEvent(){
+  // 25% chance per turn, except when a story event takes over
+  if(Math.random() < 0.25){
+    const e = randomEvents[Math.floor(Math.random()*randomEvents.length)];
+    showEvent(e.name, e.desc, e.choices);
+    return true;
+  }
+  return false;
+}
+
+/* ---------- Story Events ---------- */
+// RED SEA trigger logic: reach sea after a few days OR Pharaoh gets close
+function maybeStoryEvents(){
+  if(!G.flags.redSea){
+	toRed = totalDistance-G.distance;
+	
+    if(!G.flags.atRedSea && (toRed >= 90 )){
+      G.flags.atRedSea = true;
+      G.location = 'Red Sea';
+      write('🌊 You arrive at the Red Sea. Pharaoh draws near!');
+      redSeaEvent();
+      return true;
+    }else if(!G.flags.atRedSea && (G.pharaohDistance <= 13 )){
+	  checkPharaohCatch();
+	}
+   } else if(!G.flags.bitterwater && G.day >= 10){
+     // Bitter Water arc
+     G.location = 'Desert of Shur';
+     bitterWaterEvent();
+     return true;
+  } else if(!G.flags.manna && G.day >= 25){
+     // Bread in the Morning, Meat in the Evening arc
+     G.location = 'Desert of Sin';
+     mannaEvent();
+     return true;
+  } else if(!G.flags.commandments && G.day >= 16){
+    // Sinai arc
+    G.location = 'Mount Sinai';
+    commandmentsEvent();
+    return true;
+  } else if(G.flags.commandments && !G.flags.calf && G.day >= 32){
+    goldenCalfEvent();
+    return true;
+  }
+  return false;
+}
+
+function redSeaEvent(){
+  const choices = [
+    {text:"Raise staff over the waters (Faith ≥ 60)", req:s=>s.r.faith>=60, eff:{faith:+20,morale:+20}, onChoose:()=>{
+      // Crossing miracle
+      G.flags.redSea = true;
+      G.flags.atRedSea = false;
+      G.location = 'Desert Wilderness';
+      G.pharaohDistance = null; // no longer chasing
+      write('✨ The waters part! Israel crosses on dry ground, and the army is swept away.');
+      G.r.faith = clamp01to100(G.r.faith+20);
+      G.r.morale = clamp01to100(G.r.morale+20);
+      renderTravelRest('🏜️ You march into the wilderness, free of Pharaoh.');
+      updateHUD();
+    }},
+    {text:"March along the shore (consume time & supplies)", req:s=>true, eff:{food:-10,water:-10,supplies:-5,morale:-5}, onChoose:()=>{
+      // Pharaoh gains significantly while you hesitate
+      if(G.pharaohDistance!==null){ G.pharaohDistance = Math.max(0, G.pharaohDistance - 15); }
+      write('😰 You search the shoreline for a crossing. Pharaoh gains significant ground.');
+	  G.distance = Math.max(0, G.distance + 100);
+      if(checkPharaohCatch()) return;
+      redSeaEvent(); // still stuck at the sea
+      updateHUD();
+    }},
+    {text:"Make camp and pray (no chance of escape)", req:s=>true, eff:{faith:+5,morale:+5,health:+5}, onChoose:()=>{
+      // No chance of wind opening path - Pharaoh will always catch up
+      if(G.pharaohDistance!==null){ G.pharaohDistance = Math.max(0, G.pharaohDistance - 12); }
+      write('⏳ You wait and pray. The sea remains closed as Pharaoh approaches rapidly.');
+	  G.distance = Math.max(0, G.distance + 100);
+      if(checkPharaohCatch()) return;
+      redSeaEvent();
+      updateHUD();
+    }}
+  ];
+  showEvent('Red Sea Crisis', 'The sea blocks your path; Pharaoh\'s army closes in.', choices, true);
+}
+
+function bitterWaterEvent(){
+  const choices = [
+    {text:"Listen well to the voice of the Lord your God", req:s=>true, eff:{water:+200,faith:+30,morale:+20,health:+5}, onChoose:()=>{
+      write('💦 Moses cried to the Lord, and the Lord showed him a tree. He threw it into the water, and the water became sweet.');
+      renderTravelRest('⛺ The people encamp at and prepare to depart.');
+      updateHUD();
+    }},
+    {text:"Don\'t listen and boil the water to drink", req:s=>true, eff:{water:+10,faith:-30,morale:-20,health:-25}, onChoose:()=>{
+	  G.people = Math.max(0, G.people - 1000);
+	  G.distance = Math.max(0, G.distance + 100);
+      write('🤢 God put the diseases on you which He had put on the Egyptians.');
+      renderTravelRest('⛺ The people encamp at Shur and prepare to depart.');
+      updateHUD();
+    }}
+  ];
+  G.flags.bitterwater = true;
+  showEvent('Desert of Shur', 'You encamp at in the desert refilling your water supply.', choices, true);
+}
+
+function mannaEvent(){
+  const choices = [
+    {text:"Listen well to the voice of the Lord your God", req:s=>true, eff:{food:+200,faith:+30,morale:+20,health:+5}, onChoose:()=>{
+      write('💦 Moses cried to the Lord, and the Lord Said, I will rain bread from heaven for you. The people will go out and gather a day’s share every day.');
+      renderTravelRest('⛺ The people encamp at Sin and prepare to depart.');
+      updateHUD();
+    }},
+    {text:"Don\'t listen and hunt for food", req:s=>true, eff:{food:+10,faith:-30,morale:-20,health:-25}, onChoose:()=>{
+	  G.people = Math.max(0, G.people - 1000);
+	  G.distance = Math.max(0, G.distance + 100);
+      write('🤢 God put the diseases on you which He had put on the Egyptians.');
+      renderTravelRest('⛺ The people encamp at  and prepare to depart.');
+      updateHUD();
+    }}
+  ];
+  G.flags.manna = true;
+  showEvent('Desert of Sin', 'You encamp at in the desert gathering food supply.', choices, true);
+}
+
+function commandmentsEvent(){
+  const choices = [
+    {text:"Ascend Sinai to receive the Law", req:s=>true, eff:{faith:+10}, onChoose:()=>{
+      G.flags.commandments = true;
+      write('📜 The Ten Commandments are given; the covenant is established.');
+      renderTravelRest('⛺ The people encamp at Sinai and prepare to depart.');
+      updateHUD();
+    }}
+  ];
+  showEvent('Mount Sinai', 'You encamp at Sinai. A holy summons is given.', choices, true);
+}
+
+function goldenCalfEvent(){
+  const choices = [
+    {text:"Destroy the idol & punish rebels", req:s=>true, eff:{faith:+30,morale:-20}, onChoose:()=>{
+      G.people = Math.max(0, G.people - 3000);
+	  G.distance = Math.max(0, G.distance + 100);
+      G.flags.calf = true;
+      write('⚖️ Justice is carried out. The camp is sobered.');
+      renderTravelRest('🕊️ The camp regathers after the incident.');
+      updateHUD();
+    }},
+    {text:"Reason with the people (Faith ≥ 40)", req:s=>s.r.faith>=40, eff:{faith:+10,morale:+5}, onChoose:()=>{
+      G.flags.calf = true;
+	  G.distance = Math.max(0, G.distance + 150);
+      write('🤝 Many repent; order returns to the camp.');
+      renderTravelRest('🕊️ The camp regathers after the incident.');
+      updateHUD();
+    }},
+    {text:"Ignore it (dangerous to faith)", req:s=>true, eff:{faith:-30,morale:+5}, onChoose:()=>{
+      G.flags.calf = true;
+	  G.distance = Math.max(0, G.distance + 200);
+      write('😟 The people are confused; faith suffers.');
+      renderTravelRest('🕊️ The camp regathers after the incident.');
+      updateHUD();
+    }}
+  ];
+  showEvent('Golden Calf Rebellion', 'While on the mountain, the people made an idol.', choices, true);
+}
+
+/* ---------- Event Renderer ---------- */
+function showEvent(title, body, choices, lockTurn=false){
+  $('eventText').textContent = `⚠️ ${title}\n${body}`;
+  const box = $('choices'); box.innerHTML='';
+  choices.forEach(ch=>{
+    const btn=document.createElement('button');
+    btn.className='choice';
+    const allowed = ch.req ? ch.req(G) : true;
+    btn.textContent = ch.text;
+    if(!allowed){ btn.disabled=true; btn.classList.add('disabled'); }
+    btn.addEventListener('click', ()=>{
+      if(ch.eff) applyEffect(ch.eff);
+      if(ch.onChoose) ch.onChoose();
+      if(!lockTurn && !G.over){
+        // resume travel/rest if event didn't take over
+        renderTravelRest();
+        updateHUD();
+      }
+    });
+    box.appendChild(btn);
+  });
+}
+
+/* ---------- Travel / Rest UI ---------- */
+function renderTravelRest(hint){
+  $('eventText').textContent = hint || 'Choose to travel onward or make camp to recover.';
+  const box = $('choices'); box.innerHTML = '';
+  const b1=document.createElement('button'); b1.textContent='Travel Onward';
+  const b2=document.createElement('button'); b2.textContent='Make Camp / Rest';
+  b1.addEventListener('click', travelTurn);
+  b2.addEventListener('click', restTurn);
+  box.appendChild(b1); box.appendChild(b2);
+}
+
+/* ---------- Turn Logic ---------- */
+function travelTurn(){
+  if(G.over) return;
+  // Move toward promise
+  const march = 15;
+  G.distance = Math.max(0, G.distance - march);
+  // Pharaoh pursues until Red Sea crossing
+  if(!G.flags.redSea){
+    // Pharaoh advances aggressively when you move
+    G.pharaohDistance = Math.max(0, G.pharaohDistance - 12);
+  }
+  $('eventText').textContent = `🚶 The people march onward.\nPharaoh and his army ${G.flags.redSea?'has been swept out to sea':(G.pharaohDistance+' miles behind')}.`;
+  write('➡️ You press forward through the wilderness.');
+  endOfDay(1.0);
+    updateHUD();
+  // Arrive at Red Sea if chase is close or time passes
+  if(!maybeStoryEvents()){
+    if(!G.flags.redSea){
+      if(checkPharaohCatch()) return;
+    }else{
+      // Post-Red Sea random events
+      maybeRandomEvent();
+    }
+    updateHUD();
+    checkWinLoss();
+  }
+}
+
+function restTurn(){
+  if(G.over) return;
+  
+  // Show manna gathering options if manna has been discovered
+  if(G.flags.manna){
+    const choices = [
+      {text:"Gather day's portion", req:s=>true, eff:{food:+15,water:+10,faith:+5,water:+15}, onChoose:()=>{
+        write('🍞 You gather the daily manna as instructed.');
+        completeRestTurn();
+      }},
+      {text:"Store extra (risky)", req:s=>true, eff:{food:+5,faith:-10,health:-10,water:+5}, onChoose:()=>{
+	    G.distance = Math.max(0, G.distance + 100);
+        write('🐛 The stored manna breeds worms and becomes foul.');
+        completeRestTurn();
+      }},
+      {text:"Just rest without gathering", req:s=>true, eff:{faith:+2}, onChoose:()=>{
+	    G.distance = Math.max(0, G.distance + 100);
+        write('😴 You rest without gathering additional provisions.');
+        completeRestTurn();
+      }}
+    ];
+    showEvent('Camp & Manna', 'The camp rests. Manna covers the ground at dawn.', choices, false);
+  } else {
+    // Regular rest without manna options
+    completeRestTurn();
+  }
+}
+
+function completeRestTurn(){
+  // Rest recovers, but Pharaoh gains
+  G.r.health = clamp01to100(G.r.health + 10);
+  G.r.morale = clamp01to100(G.r.morale + 6);
+  G.r.faith  = clamp01to100(G.r.faith + 4);
+
+  if(!G.flags.redSea){
+    G.pharaohDistance = Math.max(0, G.pharaohDistance - 8);
+  }
+  $('eventText').textContent = `⛺ The camp rests and recovers.\nPharaoh is ${G.flags.redSea?'no longer pursuing':(G.pharaohDistance+' miles behind')}.`;
+  write('🛖 You make camp. Phillar of fire glow against the desert night.');
+  G.distance = Math.max(0, G.distance + 100);
+  endOfDay(0.9); // slightly less consumption while resting
+  updateHUD();
+  if(!maybeStoryEvents()){
+    if(!G.flags.redSea){
+      if(checkPharaohCatch()) return;
+    }else{
+      maybeRandomEvent();
+    }
+    updateHUD();
+    checkWinLoss();
+  }
+}
+
+/* ---------- Apply Effects ---------- */
+function applyEffect(eff){
+  for(const k in eff){
+    const v = eff[k];
+    if(['food','water','health','morale','faith','supplies'].includes(k)){
+      G.r[k] = clamp01to100(G.r[k] + v);
+      write(`📊 ${k[0].toUpperCase()+k.slice(1)} ${v>=0?'↑ +':'↓ '}${Math.abs(v)}`);
+    }else if(k==='people'){
+      G.people = Math.max(0, G.people + v);
+      write((v>=0?'👥 +':'💀 -')+Math.abs(v)+' people');
+    }
+  }
+}
+
+/* ---------- Pharaoh Catch Check ---------- */
+function checkPharaohCatch(){
+  if(G.flags.redSea) return false;
+  if(G.pharaohDistance <= 0){
+    G.over = true; G.victory = false;
+    $('eventText').textContent = '💀 Pharaoh\'s army has overtaken the camp at the sea\'s edge.';
+    $('choices').innerHTML = '';
+    write('❌ Moses falls and Israel is enslaved again. The journey ends in tragedy.');
+    return true;
+  }
+  return false;
+}
+
+/* ---------- Win / Loss ---------- */
+function checkWinLoss(){
+  if(G.people <= 0 || G.r.morale <= 0 || G.r.faith <= 0){
+    G.over = true; G.victory = false;
+    $('eventText').textContent = '💀 GAME OVER — The people cannot continue.';
+    $('choices').innerHTML = '';
+    write('❌ The journey collapses in the wilderness.');
+    return;
+  }
+  if(G.distance <= 0){
+    G.over = true; G.victory = true;
+    G.location = 'Promised Land';
+    $('eventText').textContent = `🏆 VICTORY! You have reached the border of the Promised Land.
+Final:
+• People: ${G.people.toLocaleString()}
+• Days: ${G.day}
+• Faith: ${G.r.faith}% • Morale: ${G.r.morale}%`;
+    $('choices').innerHTML = '';
+    write('🎉 The promise stands before you. Well done.');
+    updateHUD();
+  }
+}
+
+/* ---------- Buttons ---------- */
+$('btnNew').addEventListener('click', newCampaign);
+$('btnClear').addEventListener('click', ()=>{ $('log').textContent=''; });
+
+/* ---------- Boot Text ---------- */
+write('Tip: Travel to stay ahead of Pharaoh. Rest to recover—but he will gain on you.');
+write('Cross the Red Sea to end the pursuit. Keep faith and morale high!');
+</script>
+</body>
+</html>
